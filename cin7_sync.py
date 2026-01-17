@@ -1,5 +1,4 @@
 import os
-import tomllib
 import requests
 import psycopg2
 from psycopg2.extras import execute_values
@@ -15,34 +14,42 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def load_secrets(path: str = "secrets.toml") -> dict:
-    """Load secrets from TOML file."""
-    with open(path, "rb") as f:
-        return tomllib.load(f)
-
-
 class Cin7Sync:
-    def __init__(self, secrets_path: str = "secrets.toml"):
-        # Load secrets from TOML file
-        secrets = load_secrets(secrets_path)
+    def __init__(self):
+        # Cin7 API credentials from environment variables
+        self.cin7_username = os.environ.get('CIN7_API_USERNAME')
+        self.cin7_api_key = os.environ.get('CIN7_API_KEY')
+        self.cin7_base_url = os.environ.get('CIN7_BASE_URL', 'https://api.cin7.com/api/v1')
         
-        # Cin7 API credentials
-        cin7_config = secrets['cin7']
-        self.cin7_username = cin7_config['api_username']
-        self.cin7_api_key = cin7_config['api_key']
-        self.cin7_base_url = cin7_config.get('base_url', 'https://api.cin7.com/api/v1')
+        # Branch IDs (optional)
+        self.branch_hamilton_id = os.environ.get('CIN7_BRANCH_HAMILTON_ID')
+        self.branch_avondale_id = os.environ.get('CIN7_BRANCH_AVONDALE_ID')
         
-        # Branch IDs (optional, for filtering)
-        self.branch_hamilton_id = cin7_config.get('branch_hamilton_id')
-        self.branch_avondale_id = cin7_config.get('branch_avondale_id')
+        # PostgreSQL connection - Railway provides DATABASE_URL automatically
+        # Or build from individual components
+        self.database_url = os.environ.get('DATABASE_URL')
         
-        # PostgreSQL connection from secrets
-        db_config = secrets['railway_db']
-        self.database_url = (
-            f"postgresql://{db_config['user']}:{db_config['password']}"
-            f"@{db_config['host']}:{db_config['port']}/{db_config['database']}"
-            f"?sslmode={db_config.get('sslmode', 'require')}"
-        )
+        if not self.database_url:
+            # Build from individual env vars if DATABASE_URL not provided
+            db_host = os.environ.get('DB_HOST')
+            db_port = os.environ.get('DB_PORT')
+            db_name = os.environ.get('DB_NAME')
+            db_user = os.environ.get('DB_USER')
+            db_password = os.environ.get('DB_PASSWORD')
+            db_sslmode = os.environ.get('DB_SSLMODE', 'require')
+            
+            if all([db_host, db_port, db_name, db_user, db_password]):
+                self.database_url = (
+                    f"postgresql://{db_user}:{db_password}"
+                    f"@{db_host}:{db_port}/{db_name}"
+                    f"?sslmode={db_sslmode}"
+                )
+        
+        if not self.database_url:
+            raise ValueError("DATABASE_URL or individual DB_* environment variables required")
+        
+        if not self.cin7_username or not self.cin7_api_key:
+            raise ValueError("CIN7_API_USERNAME and CIN7_API_KEY environment variables required")
         
         # Setup session for Cin7 API
         self.session = requests.Session()
@@ -374,8 +381,7 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description='Sync Cin7 data to PostgreSQL')
     parser.add_argument('--full', action='store_true', help='Perform full sync instead of incremental')
-    parser.add_argument('--secrets', default='secrets.toml', help='Path to secrets.toml file')
     args = parser.parse_args()
     
-    syncer = Cin7Sync(secrets_path=args.secrets)
+    syncer = Cin7Sync()
     syncer.sync(full_sync=args.full)

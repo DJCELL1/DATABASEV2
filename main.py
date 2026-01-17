@@ -2,19 +2,17 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from cin7_sync import Cin7Sync
 import logging
-import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Cin7 Sync Service")
 
-# Path to secrets file (can be overridden via environment variable)
-SECRETS_PATH = os.environ.get('SECRETS_PATH', 'secrets.toml')
 
 class SyncResponse(BaseModel):
     status: str
     message: str
+
 
 class SyncStatus(BaseModel):
     last_sync: str | None
@@ -36,7 +34,7 @@ def trigger_sync(background_tasks: BackgroundTasks, full: bool = False):
     """
     def run_sync():
         try:
-            syncer = Cin7Sync(secrets_path=SECRETS_PATH)
+            syncer = Cin7Sync()
             syncer.sync(full_sync=full)
         except Exception as e:
             logger.error(f"Background sync failed: {e}")
@@ -57,7 +55,7 @@ def trigger_sync_blocking(full: bool = False):
     Use /sync for non-blocking background sync.
     """
     try:
-        syncer = Cin7Sync(secrets_path=SECRETS_PATH)
+        syncer = Cin7Sync()
         syncer.sync(full_sync=full)
         return SyncResponse(
             status="completed",
@@ -71,7 +69,7 @@ def trigger_sync_blocking(full: bool = False):
 def get_sync_status():
     """Get the last sync date and total records."""
     try:
-        syncer = Cin7Sync(secrets_path=SECRETS_PATH)
+        syncer = Cin7Sync()
         syncer.init_database()
         
         conn = syncer.get_db_connection()
@@ -114,7 +112,7 @@ def get_skus(
     - **offset**: Pagination offset
     """
     try:
-        syncer = Cin7Sync(secrets_path=SECRETS_PATH)
+        syncer = Cin7Sync()
         conn = syncer.get_db_connection()
         cur = conn.cursor()
         
