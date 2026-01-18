@@ -151,7 +151,7 @@ class Cin7Sync:
         cur.close()
         conn.close()
     
-    def fetch_product_options(self, modified_since: Optional[datetime] = None) -> list:
+    def fetch_product_options(self, modified_since: Optional[datetime] = None, limit: Optional[int] = None) -> list:
         """Fetch product options from Cin7, optionally filtered by modified date."""
         all_options = []
         page = 1
@@ -183,6 +183,12 @@ class Cin7Sync:
             
             all_options.extend(options)
             logger.info(f"Fetched {len(options)} product options from page {page}")
+            
+            # Check if we've hit the limit
+            if limit and len(all_options) >= limit:
+                all_options = all_options[:limit]
+                logger.info(f"Reached limit of {limit} product options")
+                break
             
             if len(options) < rows_per_page:
                 break
@@ -253,14 +259,15 @@ class Cin7Sync:
         
         logger.info(f"Total suppliers cached: {len(self.supplier_cache)}")
     
-    def sync(self, full_sync: bool = False):
+    def sync(self, full_sync: bool = False, limit: Optional[int] = None):
         """
         Main sync method.
         
         Args:
             full_sync: If True, sync all records. If False, only sync changes since last sync.
+            limit: Optional limit on number of SKUs to sync (for testing)
         """
-        logger.info(f"Starting {'full' if full_sync else 'incremental'} sync...")
+        logger.info(f"Starting {'full' if full_sync else 'incremental'} sync..." + (f" (limit: {limit})" if limit else ""))
         
         try:
             # Initialize database tables
@@ -278,8 +285,8 @@ class Cin7Sync:
             # Pre-fetch all suppliers to reduce API calls
             self.fetch_all_suppliers()
             
-            # Fetch product options (with optional date filter)
-            product_options = self.fetch_product_options(modified_since)
+            # Fetch product options (with optional date filter and limit)
+            product_options = self.fetch_product_options(modified_since, limit=limit)
             
             if not product_options:
                 logger.info("No new or updated products to sync")

@@ -25,38 +25,42 @@ def health_check():
 
 
 @app.post("/sync", response_model=SyncResponse)
-def trigger_sync(background_tasks: BackgroundTasks, full: bool = False):
+def trigger_sync(background_tasks: BackgroundTasks, full: bool = False, limit: int | None = None):
     """
     Trigger a sync from Cin7 to PostgreSQL.
     
     - **full=false** (default): Only sync products modified since last sync
     - **full=true**: Sync all products
+    - **limit**: Optional limit on number of SKUs to sync (for testing, e.g. limit=100)
     """
     def run_sync():
         try:
             syncer = Cin7Sync()
-            syncer.sync(full_sync=full)
+            syncer.sync(full_sync=full, limit=limit)
         except Exception as e:
             logger.error(f"Background sync failed: {e}")
     
     background_tasks.add_task(run_sync)
     
     sync_type = "full" if full else "incremental"
+    limit_msg = f" (limit: {limit})" if limit else ""
     return SyncResponse(
         status="started",
-        message=f"Started {sync_type} sync in background"
+        message=f"Started {sync_type} sync in background{limit_msg}"
     )
 
 
 @app.post("/sync/blocking", response_model=SyncResponse)
-def trigger_sync_blocking(full: bool = False):
+def trigger_sync_blocking(full: bool = False, limit: int | None = None):
     """
     Trigger a sync and wait for completion (blocking).
     Use /sync for non-blocking background sync.
+    
+    - **limit**: Optional limit on number of SKUs to sync (for testing, e.g. limit=100)
     """
     try:
         syncer = Cin7Sync()
-        syncer.sync(full_sync=full)
+        syncer.sync(full_sync=full, limit=limit)
         return SyncResponse(
             status="completed",
             message="Sync completed successfully"
